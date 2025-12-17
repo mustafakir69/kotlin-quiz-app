@@ -40,17 +40,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Uygulamanın TEK tipografi standardı (her yerde aynı, net ve büyük) */
 @Composable
 private fun AppTheme(content: @Composable () -> Unit) {
     val appTypography = Typography(
-        headlineLarge = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 36.sp),
-        headlineMedium = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp),
-        titleLarge = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, lineHeight = 26.sp),
-        titleMedium = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, lineHeight = 24.sp),
-        bodyLarge = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Normal, lineHeight = 24.sp),
-        bodyMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 22.sp),
-        labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, lineHeight = 18.sp)
+        headlineLarge = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Bold, lineHeight = 40.sp),
+        headlineMedium = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 34.sp),
+        titleLarge = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp),
+        titleMedium = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 26.sp),
+        bodyLarge = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Normal, lineHeight = 26.sp),
+        bodyMedium = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Normal, lineHeight = 24.sp),
+        labelLarge = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp)
     )
 
     MaterialTheme(
@@ -63,10 +62,11 @@ private fun AppTheme(content: @Composable () -> Unit) {
 fun AppRoot(vm: QuizViewModel = viewModel()) {
     val state by vm.uiState.collectAsState()
 
+    // TURUNCU ARKA PLAN (soft gradient)
     val bg = Brush.verticalGradient(
         listOf(
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-            MaterialTheme.colorScheme.background
+            Color(0xFFFFF3E0), // çok açık turuncu
+            Color(0xFFFFC07A)  // sıcak turuncu
         )
     )
 
@@ -84,14 +84,12 @@ fun AppRoot(vm: QuizViewModel = viewModel()) {
             .background(bg)
     ) {
         when (state.screen) {
-            "MENU" -> MenuScreen(
-                onStart = { vm.startQuiz(it) }
-            )
+            "MENU" -> MenuScreen(onStart = vm::startQuiz)
 
             "QUIZ" -> {
                 val type = state.quizType?.let { QuizType.valueOf(it) } ?: QuizType.KOTLIN
                 val questions = vm.getQuestionsFor(type)
-                QuizScreenModern(
+                QuizScreen(
                     title = type.title,
                     index = state.currentIndex,
                     total = questions.size,
@@ -109,7 +107,7 @@ fun AppRoot(vm: QuizViewModel = viewModel()) {
             "RESULT" -> {
                 val type = state.quizType?.let { QuizType.valueOf(it) } ?: QuizType.KOTLIN
                 val total = vm.getQuestionsFor(type).size
-                ResultScreenModern(
+                ResultScreen(
                     score = state.score,
                     total = total,
                     seconds = state.elapsedSeconds,
@@ -120,6 +118,16 @@ fun AppRoot(vm: QuizViewModel = viewModel()) {
         }
     }
 }
+
+/** Menü ikonlarının arka plan rengi (daha belirgin) */
+private fun menuIconBg(type: QuizType): Color = when (type) {
+    QuizType.KOTLIN -> Color(0xFF2563EB)   // canlı mavi
+    QuizType.COMPOSE -> Color(0xFFDB2777)  // canlı pembe
+    QuizType.KARISIK -> Color(0xFF16A34A)  // canlı yeşil
+}
+
+/** Menü ikonunun rengi */
+private fun menuIconTint(): Color = Color.White
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,101 +148,88 @@ private fun MenuScreen(onStart: (QuizType) -> Unit) {
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-
-            // ÜST TANITIM KARTI (çok daha şık, yazılar belirgin)
+            // Hero alan (turuncu temaya uyumlu)
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFFFE0B2))
             ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Sınav Uygulaması", style = MaterialTheme.typography.headlineMedium)
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(
-                        "Bir sınav türü seç. Bitirince sonuç ekranından tekrar başlatabilir veya ana menüye dönebilirsin.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                        text = "Sınav Uygulaması",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color(0xFF4E2600)
+                    )
+                    Text(
+                        text = "Bir sınav seç ve hemen başla.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color(0xFF6B2F00)
                     )
                 }
             }
 
-            // “Sınav çeşitleri” başlık satırı
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Sınav Çeşitleri", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.weight(1f))
-                AssistChip(
-                    onClick = {},
-                    label = { Text("Başlamak için seç", style = MaterialTheme.typography.labelLarge) },
-                    leadingIcon = { Icon(Icons.Filled.Quiz, null) }
-                )
-            }
+            Text("Sınav Çeşitleri", style = MaterialTheme.typography.titleLarge, color = Color(0xFF2B1B10))
 
-            // MENÜ KARTLARI (büyük yazı + net CTA)
             QuizType.entries.forEach { type ->
                 ElevatedCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onStart(type) },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFFFFBF5))
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(horizontal = 16.dp, vertical = 18.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Daha belirgin ikon alanı
                         Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(14.dp)
+                            color = menuIconBg(type),
+                            shape = RoundedCornerShape(16.dp),
+                            tonalElevation = 6.dp,
+                            shadowElevation = 6.dp
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Quiz,
                                 contentDescription = null,
-                                modifier = Modifier.padding(12.dp)
+                                modifier = Modifier.padding(14.dp),
+                                tint = menuIconTint()
                             )
                         }
 
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(14.dp))
 
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(type.title, style = MaterialTheme.typography.titleLarge)
-                            Text(
-                                "3 soru • Süre sayacı açık • Doğru/yanlış renkli",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
-                            )
-                        }
-
-                        Spacer(Modifier.width(8.dp))
-
-                        FilledTonalButton(
-                            onClick = { onStart(type) },
-                            shape = RoundedCornerShape(14.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text("Başla", style = MaterialTheme.typography.titleMedium)
+                            Text(type.title, style = MaterialTheme.typography.titleLarge, color = Color(0xFF1F130A))
+                            Text("3 soru", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF6B2F00))
+                        }
+
+                        Button(
+                            onClick = { onStart(type) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF7A00)),
+                            shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
+                        ) {
+                            Text("Başla", style = MaterialTheme.typography.titleMedium, color = Color.White)
                         }
                     }
                 }
             }
-
-            Spacer(Modifier.height(6.dp))
-
-
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QuizScreenModern(
+private fun QuizScreen(
     title: String,
     index: Int,
     total: Int,
@@ -263,6 +258,7 @@ private fun QuizScreenModern(
             )
         }
     ) { padding ->
+
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -276,14 +272,15 @@ private fun QuizScreenModern(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
-                    .clip(RoundedCornerShape(99.dp))
+                    .clip(RoundedCornerShape(99.dp)),
+                color = Color(0xFFFF7A00)
             )
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "Soru ${index + 1} / $total",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+                    color = Color(0xFF3A2416)
                 )
                 Spacer(Modifier.weight(1f))
                 if (isAnswered) {
@@ -296,16 +293,43 @@ private fun QuizScreenModern(
                 }
             }
 
-            ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(18.dp)) {
+            // SORU KARTI:
+            // Arka planla aynı tona yakın, ama gölgeli + border ile belirgin
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = Color(0xFFFFF3E0) // arka planın açık tonu
+                ),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 10.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(18.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Quiz, null, modifier = Modifier.size(22.dp))
+                        Surface(
+                            color = Color(0xFFFF7A00),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Quiz,
+                                contentDescription = null,
+                                modifier = Modifier.padding(10.dp),
+                                tint = Color.White
+                            )
+                        }
                         Spacer(Modifier.width(10.dp))
-                        Text("Soru", style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f))
+                        Text("Soru", style = MaterialTheme.typography.titleMedium, color = Color(0xFF6B2F00))
                     }
+
                     Spacer(Modifier.height(10.dp))
-                    Text(question.text, style = MaterialTheme.typography.headlineMedium)
+
+                    Text(
+                        question.text,
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color(0xFF1F130A)
+                    )
                 }
             }
 
@@ -315,8 +339,9 @@ private fun QuizScreenModern(
             val wrongBg = Color(0xFFFEE2E2)
             val wrongBorder = Color(0xFFEF4444)
 
-            val base = MaterialTheme.colorScheme.surface
-            val disabledBg = MaterialTheme.colorScheme.surfaceVariant
+            // Şık kartlarının normal arka planı (turuncu temaya uygun kırık beyaz)
+            val base = Color(0xFFFFFBF5)
+            val disabledBg = Color(0xFFFFEAD3)
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 question.options.forEachIndexed { i, opt ->
@@ -332,40 +357,49 @@ private fun QuizScreenModern(
                     val bg by animateColorAsState(target, label = "optBg")
 
                     val borderColor = when {
-                        !isAnswered && isSel -> MaterialTheme.colorScheme.primary
+                        !isAnswered && isSel -> Color(0xFFFF7A00)
                         isAnswered && isCorrectOption -> correctBorder
                         isAnswered && isSel && !isCorrectOption -> wrongBorder
-                        else -> MaterialTheme.colorScheme.outlineVariant
+                        else -> Color(0xFFFFC07A)
                     }
 
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 64.dp)
+                            .heightIn(min = 68.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .clickable(enabled = !isAnswered) { onSelect(i) },
                         color = bg,
                         border = BorderStroke(1.dp, borderColor),
-                        tonalElevation = 2.dp,
+                        tonalElevation = 4.dp,
+                        shadowElevation = 4.dp,
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             val label = ('A' + i).toString()
                             Surface(
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                color = Color(0xFFFFE0B2),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text(
                                     label,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    style = MaterialTheme.typography.titleMedium
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color(0xFF6B2F00)
                                 )
                             }
+
                             Spacer(Modifier.width(12.dp))
-                            Text(opt, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+
+                            Text(
+                                opt,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF1F130A)
+                            )
                         }
                     }
                 }
@@ -374,12 +408,15 @@ private fun QuizScreenModern(
             Button(
                 onClick = onNext,
                 enabled = isAnswered,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp),
-                shape = RoundedCornerShape(16.dp)
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF7A00))
             ) {
-                Text(if (index == total - 1) "Sınavı Bitir" else "Sonraki Soru", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (index == total - 1) "Sınavı Bitir" else "Sonraki Soru",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White
+                )
             }
         }
     }
@@ -387,7 +424,7 @@ private fun QuizScreenModern(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ResultScreenModern(
+private fun ResultScreen(
     score: Int,
     total: Int,
     seconds: Int,
@@ -410,14 +447,18 @@ private fun ResultScreenModern(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFFFFBF5)),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 10.dp)
+            ) {
                 Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Skor", style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f))
+                    Text("Skor", style = MaterialTheme.typography.titleMedium, color = Color(0xFF6B2F00))
                     Spacer(Modifier.height(8.dp))
-                    Text("$score / $total", style = MaterialTheme.typography.headlineLarge)
+                    Text("$score / $total", style = MaterialTheme.typography.headlineLarge, color = Color(0xFF1F130A))
                     Spacer(Modifier.height(10.dp))
-                    Text("Süre: ${seconds}s", style = MaterialTheme.typography.bodyLarge)
+                    Text("Süre: ${seconds}s", style = MaterialTheme.typography.bodyLarge, color = Color(0xFF3A2416))
                 }
             }
 
@@ -425,20 +466,22 @@ private fun ResultScreenModern(
 
             Button(
                 onClick = onRestart,
-                modifier = Modifier.fillMaxWidth().height(58.dp),
-                shape = RoundedCornerShape(16.dp)
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))
             ) {
-                Text("Tekrar Başla", style = MaterialTheme.typography.titleMedium)
+                Text("Tekrar Başla", style = MaterialTheme.typography.titleMedium, color = Color.White)
             }
 
             Spacer(Modifier.height(12.dp))
 
             OutlinedButton(
                 onClick = onMenu,
-                modifier = Modifier.fillMaxWidth().height(58.dp),
-                shape = RoundedCornerShape(16.dp)
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color(0xFFFFA94D))
             ) {
-                Text("Ana Menüye Dön", style = MaterialTheme.typography.titleMedium)
+                Text("Ana Menüye Dön", style = MaterialTheme.typography.titleMedium, color = Color(0xFF1F130A))
             }
         }
     }

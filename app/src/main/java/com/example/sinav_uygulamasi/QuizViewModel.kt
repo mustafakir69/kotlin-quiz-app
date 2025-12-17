@@ -19,8 +19,8 @@ data class Question(
 )
 
 data class QuizUiState(
-    val screen: String = "MENU",          // MENU, QUIZ, RESULT
-    val quizType: String? = null,         // KOTLIN, COMPOSE, KARISIK
+    val screen: String = "MENU",      // MENU, QUIZ, RESULT
+    val quizType: String? = null,     // KOTLIN, COMPOSE, KARISIK
     val currentIndex: Int = 0,
     val selectedIndex: Int = -1,
     val isAnswered: Boolean = false,
@@ -59,7 +59,7 @@ class QuizViewModel(
     )
     val uiState: StateFlow<QuizUiState> = _uiState
 
-    // Soru bankaları (şimdilik 3’er soru; sonra 10’a çıkarabiliriz)
+    // Şimdilik 3 soru
     private val kotlinQuestions = listOf(
         Question(
             "Kotlin'de değiştirilemeyen değişken hangisiyle tanımlanır?",
@@ -108,10 +108,9 @@ class QuizViewModel(
         QuizType.KARISIK -> mixedQuestions
     }
 
-    fun currentQuestions(): List<Question> {
+    private fun currentQuestions(): List<Question> {
         val t = _uiState.value.quizType ?: return emptyList()
-        val type = QuizType.valueOf(t)
-        return getQuestionsFor(type)
+        return getQuestionsFor(QuizType.valueOf(t))
     }
 
     fun goMenu() {
