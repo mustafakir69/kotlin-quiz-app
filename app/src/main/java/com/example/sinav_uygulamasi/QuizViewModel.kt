@@ -1,205 +1,271 @@
 package com.example.sinav_uygulamasi
 
-import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.update
-
-enum class QuizType(val title: String) {
-    KOTLIN("Kotlin Temelleri"),
-    COMPOSE("Jetpack Compose"),
-    KARISIK("Karışık")
-}
-
-data class Question(
-    val text: String,
-    val options: List<String>,
-    val correctIndex: Int
-)
+import android.app.Application
+import android.media.AudioManager
+import android.media.ToneGenerator
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
 data class QuizUiState(
-    val screen: String = "MENU",      // MENU, QUIZ, RESULT
-    val quizType: String? = null,     // KOTLIN, COMPOSE, KARISIK
+    val screen: String = "MENU", // MENU, QUIZ, RESULT, SETTINGS
+    val selectedType: QuizType = QuizType.KOTLIN,
+
+    val questions: List<Question> = emptyList(),
     val currentIndex: Int = 0,
-    val selectedIndex: Int = -1,
+
+    val answers: List<Int?> = emptyList(),
+    val elapsedSeconds: Int = 0,
+
     val isAnswered: Boolean = false,
-    val isCorrect: Boolean? = null,
-    val score: Int = 0,
-    val finished: Boolean = false,
-    val elapsedSeconds: Int = 0
+
+    val lastSummary: String = "",
+    val bestKotlin: Int = 0,
+    val bestCompose: Int = 0,
+    val bestMixed: Int = 0,
+
+    val soundEnabled: Boolean = true,
+    val orangeTheme: Boolean = true,
+    val largeText: Boolean = true
 )
 
-class QuizViewModel(
-    private val savedStateHandle: SavedStateHandle
-) : ViewModel() {
+class QuizViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val KEY_SCREEN = "screen"
-    private val KEY_TYPE = "type"
-    private val KEY_INDEX = "index"
-    private val KEY_SELECTED = "selected"
-    private val KEY_ANSWERED = "answered"
-    private val KEY_CORRECT = "correct"
-    private val KEY_SCORE = "score"
-    private val KEY_FINISHED = "finished"
-    private val KEY_SECONDS = "seconds"
+    private val store = PrefsDataStore(app.applicationContext)
+    private val _ui = MutableStateFlow(QuizUiState())
+    val ui: StateFlow<QuizUiState> = _ui.asStateFlow()
 
-    private val _uiState = MutableStateFlow(
-        QuizUiState(
-            screen = savedStateHandle[KEY_SCREEN] ?: "MENU",
-            quizType = savedStateHandle[KEY_TYPE],
-            currentIndex = savedStateHandle[KEY_INDEX] ?: 0,
-            selectedIndex = savedStateHandle[KEY_SELECTED] ?: -1,
-            isAnswered = savedStateHandle[KEY_ANSWERED] ?: false,
-            isCorrect = savedStateHandle[KEY_CORRECT],
-            score = savedStateHandle[KEY_SCORE] ?: 0,
-            finished = savedStateHandle[KEY_FINISHED] ?: false,
-            elapsedSeconds = savedStateHandle[KEY_SECONDS] ?: 0
-        )
-    )
-    val uiState: StateFlow<QuizUiState> = _uiState
+    private val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
 
-    // Şimdilik 3 soru
-    private val kotlinQuestions = listOf(
-        Question(
-            "Kotlin'de değiştirilemeyen değişken hangisiyle tanımlanır?",
-            listOf("var", "val", "let", "const"),
-            1
-        ),
-        Question(
-            "Kotlin'de null güvenli çağrı operatörü hangisidir?",
-            listOf("!!", "?.", "::", "=>"),
-            1
-        ),
-        Question(
-            "Kotlin'de fonksiyon tanımlamak için kullanılan anahtar kelime hangisidir?",
-            listOf("fun", "def", "function", "method"),
-            0
-        )
-    )
-
-    private val composeQuestions = listOf(
-        Question(
-            "Jetpack Compose’da arayüz hangi yapıyla yazılır?",
-            listOf("XML", "Composable fonksiyonlar", "Fragment", "WebView"),
-            1
-        ),
-        Question(
-            "Compose’da UI oluşturan fonksiyonlar hangi anotasyonla işaretlenir?",
-            listOf("@UI", "@Compose", "@Composable", "@Screen"),
-            2
-        ),
-        Question(
-            "Compose’da liste göstermek için en sık kullanılan yapı hangisidir?",
-            listOf("LazyColumn", "RecyclerView", "ListView", "GridView"),
-            0
-        )
-    )
-
-    private val mixedQuestions = listOf(
-        kotlinQuestions[0],
-        composeQuestions[1],
-        kotlinQuestions[1]
-    )
-
-    fun getQuestionsFor(type: QuizType): List<Question> = when (type) {
-        QuizType.KOTLIN -> kotlinQuestions
-        QuizType.COMPOSE -> composeQuestions
-        QuizType.KARISIK -> mixedQuestions
+    init {
+        viewModelScope.launch {
+            store.flow.collect { s ->
+                _ui.update {
+                    it.copy(
+                        lastSummary = s.lastSummary,
+                        bestKotlin = s.bestKotlin,
+                        bestCompose = s.bestCompose,
+                        bestMixed = s.bestMixed,
+                        soundEnabled = s.soundEnabled,
+                        orangeTheme = s.orangeTheme,
+                        largeText = s.largeText
+                    )
+                }
+            }
+        }
     }
 
-    private fun currentQuestions(): List<Question> {
-        val t = _uiState.value.quizType ?: return emptyList()
-        return getQuestionsFor(QuizType.valueOf(t))
+    fun goMenu() = _ui.update { it.copy(screen = "MENU") }
+    fun goSettings() = _ui.update { it.copy(screen = "SETTINGS") }
+
+    fun updateType(type: QuizType) = _ui.update { it.copy(selectedType = type) }
+
+    fun saveSettings(sound: Boolean, orange: Boolean, large: Boolean) {
+        viewModelScope.launch { store.saveSettings(sound, orange, large) }
     }
 
-    fun goMenu() {
-        _uiState.update { it.copy(screen = "MENU") }
-        savedStateHandle[KEY_SCREEN] = "MENU"
-    }
+    fun start() {
+        val type = _ui.value.selectedType
 
-    fun startQuiz(type: QuizType) {
-        _uiState.value = QuizUiState(
+        val bank = buildQuestionBank(type).shuffled()
+
+        val shuffledQuestions = bank.map { q ->
+            q.copy(options = q.options.shuffled())
+        }
+
+        _ui.value = _ui.value.copy(
             screen = "QUIZ",
-            quizType = type.name
+            questions = shuffledQuestions,
+            currentIndex = 0,
+            answers = List(shuffledQuestions.size) { null },
+            elapsedSeconds = 0,
+            isAnswered = false
         )
-        savedStateHandle[KEY_SCREEN] = "QUIZ"
-        savedStateHandle[KEY_TYPE] = type.name
-        savedStateHandle[KEY_INDEX] = 0
-        savedStateHandle[KEY_SELECTED] = -1
-        savedStateHandle[KEY_ANSWERED] = false
-        savedStateHandle[KEY_CORRECT] = null
-        savedStateHandle[KEY_SCORE] = 0
-        savedStateHandle[KEY_FINISHED] = false
-        savedStateHandle[KEY_SECONDS] = 0
     }
 
     fun tick() {
-        val s = _uiState.value
-        if (s.screen != "QUIZ" || s.finished) return
-        val next = s.elapsedSeconds + 1
-        _uiState.update { it.copy(elapsedSeconds = next) }
-        savedStateHandle[KEY_SECONDS] = next
+        val s = _ui.value
+        if (s.screen != "QUIZ") return
+        _ui.update { it.copy(elapsedSeconds = it.elapsedSeconds + 1) }
     }
 
-    fun selectOption(index: Int) {
-        val s = _uiState.value
-        if (s.screen != "QUIZ" || s.finished || s.isAnswered) return
+    fun select(optionIndex: Int) {
+        val s = _ui.value
+        if (s.screen != "QUIZ") return
 
-        val questions = currentQuestions()
-        if (questions.isEmpty()) return
+        val q = s.questions[s.currentIndex]
+        val isCorrect = q.options.getOrNull(optionIndex)?.isCorrect == true
 
-        val q = questions[s.currentIndex]
-        val correct = (index == q.correctIndex)
-        val newScore = if (correct) s.score + 1 else s.score
+        val newAnswers = s.answers.toMutableList()
+        newAnswers[s.currentIndex] = optionIndex
 
-        _uiState.update {
+        _ui.update { it.copy(answers = newAnswers, isAnswered = true) }
+
+        if (s.soundEnabled) {
+            if (isCorrect) tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+            else tone.startTone(ToneGenerator.TONE_PROP_NACK, 140)
+        }
+    }
+
+    fun prev() {
+        val s = _ui.value
+        if (s.screen != "QUIZ" || s.currentIndex == 0) return
+
+        val newIndex = s.currentIndex - 1
+        _ui.update {
             it.copy(
-                selectedIndex = index,
-                isAnswered = true,
-                isCorrect = correct,
-                score = newScore
+                currentIndex = newIndex,
+                isAnswered = (it.answers[newIndex] != null)
             )
         }
-
-        savedStateHandle[KEY_SELECTED] = index
-        savedStateHandle[KEY_ANSWERED] = true
-        savedStateHandle[KEY_CORRECT] = correct
-        savedStateHandle[KEY_SCORE] = newScore
     }
 
     fun next() {
-        val s = _uiState.value
-        if (s.screen != "QUIZ" || s.finished) return
+        val s = _ui.value
+        if (s.screen != "QUIZ") return
 
-        val questions = currentQuestions()
-        val isLast = s.currentIndex == questions.lastIndex
-
-        if (isLast) {
-            _uiState.update { it.copy(finished = true, screen = "RESULT") }
-            savedStateHandle[KEY_FINISHED] = true
-            savedStateHandle[KEY_SCREEN] = "RESULT"
+        val last = s.currentIndex == s.questions.lastIndex
+        if (last) {
+            finishQuiz()
             return
         }
 
         val newIndex = s.currentIndex + 1
-        _uiState.update {
+        _ui.update {
             it.copy(
                 currentIndex = newIndex,
-                selectedIndex = -1,
-                isAnswered = false,
-                isCorrect = null
+                isAnswered = (it.answers[newIndex] != null)
+            )
+        }
+    }
+
+    private fun finishQuiz() {
+        val s = _ui.value
+        val score = calculateScore(s.questions, s.answers)
+        val total = s.questions.size
+
+        viewModelScope.launch {
+            store.saveResult(
+                type = s.selectedType,
+                score = score,
+                total = total,
+                seconds = s.elapsedSeconds
             )
         }
 
-        savedStateHandle[KEY_INDEX] = newIndex
-        savedStateHandle[KEY_SELECTED] = -1
-        savedStateHandle[KEY_ANSWERED] = false
-        savedStateHandle[KEY_CORRECT] = null
+        _ui.update { it.copy(screen = "RESULT") }
     }
 
-    fun restartSameQuiz() {
-        val typeName = _uiState.value.quizType ?: return
-        startQuiz(QuizType.valueOf(typeName))
+    fun restartSame() = start()
+
+    fun buildWrongReview(): List<AnswerRecord> {
+        val s = _ui.value
+        if (s.questions.isEmpty()) return emptyList()
+
+        return s.questions.mapIndexedNotNull { idx, q ->
+            val selectedIdx = s.answers.getOrNull(idx)
+            val selectedText = selectedIdx?.let { q.options.getOrNull(it)?.text }
+            val correctText = q.options.firstOrNull { it.isCorrect }?.text ?: ""
+            val isCorrect = selectedIdx != null && (q.options.getOrNull(selectedIdx)?.isCorrect == true)
+            if (isCorrect) null
+            else AnswerRecord(q.text, selectedText, correctText)
+        }
+    }
+
+    fun getScoreText(): String {
+        val s = _ui.value
+        val sc = calculateScore(s.questions, s.answers)
+        return "Skorum: $sc/${s.questions.size} – Süre: ${s.elapsedSeconds}s – ${s.selectedType.title}"
+    }
+
+    fun getScorePair(): Pair<Int, Int> {
+        val s = _ui.value
+        return calculateScore(s.questions, s.answers) to s.questions.size
+    }
+
+    private fun calculateScore(questions: List<Question>, answers: List<Int?>): Int {
+        var score = 0
+        questions.forEachIndexed { i, q ->
+            val sel = answers.getOrNull(i)
+            if (sel != null && q.options.getOrNull(sel)?.isCorrect == true) score++
+        }
+        return score
+    }
+
+    private fun buildQuestionBank(type: QuizType): List<Question> {
+        val kotlin = listOf(
+            Question(
+                "Kotlin'de değiştirilemeyen değişken hangisiyle tanımlanır?",
+                listOf(
+                    Option("var", false),
+                    Option("val", true),
+                    Option("let", false),
+                    Option("const", false)
+                ),
+                "val: değiştirilemeyen (immutable) değişken için kullanılır."
+            ),
+            Question(
+                "Kotlin'de null güvenli çağrı operatörü hangisidir?",
+                listOf(
+                    Option("!!", false),
+                    Option("?.", true),
+                    Option("::", false),
+                    Option("=>", false)
+                ),
+                "?. null ise hata vermez, null döndürür."
+            ),
+            Question(
+                "Kotlin'de fonksiyon tanımlamak için kullanılan anahtar kelime hangisidir?",
+                listOf(
+                    Option("fun", true),
+                    Option("def", false),
+                    Option("function", false),
+                    Option("method", false)
+                ),
+                "Kotlin fonksiyonları 'fun' ile tanımlar."
+            )
+        )
+
+        val compose = listOf(
+            Question(
+                "Jetpack Compose’da arayüz hangi yapıyla yazılır?",
+                listOf(
+                    Option("XML", false),
+                    Option("Composable fonksiyonlar", true),
+                    Option("Fragment", false),
+                    Option("WebView", false)
+                ),
+                "Compose arayüzü @Composable fonksiyonlarla oluşturur."
+            ),
+            Question(
+                "Compose’da UI oluşturan fonksiyonlar hangi anotasyonla işaretlenir?",
+                listOf(
+                    Option("@UI", false),
+                    Option("@Compose", false),
+                    Option("@Composable", true),
+                    Option("@Screen", false)
+                ),
+                "@Composable, Compose UI üreten fonksiyonları işaretler."
+            ),
+            Question(
+                "Compose’da liste göstermek için en sık kullanılan yapı hangisidir?",
+                listOf(
+                    Option("LazyColumn", true),
+                    Option("RecyclerView", false),
+                    Option("ListView", false),
+                    Option("GridView", false)
+                ),
+                "LazyColumn, Compose'da verimli liste için kullanılır."
+            )
+        )
+
+        val mixed = listOf(kotlin[0], compose[1], kotlin[1])
+
+        return when (type) {
+            QuizType.KOTLIN -> kotlin
+            QuizType.COMPOSE -> compose
+            QuizType.KARISIK -> mixed
+        }
     }
 }
