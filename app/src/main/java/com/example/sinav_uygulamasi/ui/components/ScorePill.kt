@@ -22,7 +22,7 @@ fun ScorePill(title: String, value: Int, color: Color, modifier: Modifier = Modi
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(title, style = MaterialTheme.typography.labelLarge, color = color)
-            Text(value.toString(), style = MaterialTheme.typography.titleLarge)
+            Text("${value}", style = MaterialTheme.typography.titleLarge)
         }
     }
 }

@@ -1,11 +1,12 @@
 package com.example.sinav_uygulamasi
 
 import android.app.Application
-import android.media.AudioManager
-import android.media.ToneGenerator
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class QuizUiState(
@@ -25,9 +26,10 @@ data class QuizUiState(
     val bestCompose: Int = 0,
     val bestMixed: Int = 0,
 
-    val soundEnabled: Boolean = true,
     val orangeTheme: Boolean = true,
-    val largeText: Boolean = true
+    val largeText: Boolean = true,
+
+    val examHistory: List<String> = emptyList()
 )
 
 class QuizViewModel(app: Application) : AndroidViewModel(app) {
@@ -35,8 +37,6 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
     private val store = PrefsDataStore(app.applicationContext)
     private val _ui = MutableStateFlow(QuizUiState())
     val ui: StateFlow<QuizUiState> = _ui.asStateFlow()
-
-    private val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
 
     init {
         viewModelScope.launch {
@@ -47,9 +47,9 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
                         bestKotlin = s.bestKotlin,
                         bestCompose = s.bestCompose,
                         bestMixed = s.bestMixed,
-                        soundEnabled = s.soundEnabled,
                         orangeTheme = s.orangeTheme,
-                        largeText = s.largeText
+                        largeText = s.largeText,
+                        examHistory = s.examHistory
                     )
                 }
             }
@@ -61,18 +61,15 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateType(type: QuizType) = _ui.update { it.copy(selectedType = type) }
 
-    fun saveSettings(sound: Boolean, orange: Boolean, large: Boolean) {
-        viewModelScope.launch { store.saveSettings(sound, orange, large) }
+    fun saveSettings(orange: Boolean, large: Boolean) {
+        viewModelScope.launch { store.saveSettings(orange, large) }
     }
 
     fun start() {
         val type = _ui.value.selectedType
 
         val bank = buildQuestionBank(type).shuffled()
-
-        val shuffledQuestions = bank.map { q ->
-            q.copy(options = q.options.shuffled())
-        }
+        val shuffledQuestions = bank.map { q -> q.copy(options = q.options.shuffled()) }
 
         _ui.value = _ui.value.copy(
             screen = "QUIZ",
@@ -93,19 +90,12 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
     fun select(optionIndex: Int) {
         val s = _ui.value
         if (s.screen != "QUIZ") return
-
-        val q = s.questions[s.currentIndex]
-        val isCorrect = q.options.getOrNull(optionIndex)?.isCorrect == true
+        if (s.isAnswered) return
 
         val newAnswers = s.answers.toMutableList()
         newAnswers[s.currentIndex] = optionIndex
 
         _ui.update { it.copy(answers = newAnswers, isAnswered = true) }
-
-        if (s.soundEnabled) {
-            if (isCorrect) tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
-            else tone.startTone(ToneGenerator.TONE_PROP_NACK, 140)
-        }
     }
 
     fun prev() {
@@ -168,8 +158,7 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
             val selectedText = selectedIdx?.let { q.options.getOrNull(it)?.text }
             val correctText = q.options.firstOrNull { it.isCorrect }?.text ?: ""
             val isCorrect = selectedIdx != null && (q.options.getOrNull(selectedIdx)?.isCorrect == true)
-            if (isCorrect) null
-            else AnswerRecord(q.text, selectedText, correctText)
+            if (isCorrect) null else AnswerRecord(q.text, selectedText, correctText)
         }
     }
 

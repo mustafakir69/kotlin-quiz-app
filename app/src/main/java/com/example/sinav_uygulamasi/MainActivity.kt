@@ -1,4 +1,6 @@
+
 package com.example.sinav_uygulamasi
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -7,10 +9,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -45,7 +45,9 @@ private fun AppRoot(vm: QuizViewModel = viewModel()) {
             bodyMedium = TextStyle(fontSize = 18.sp, lineHeight = 24.sp),
             labelLarge = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         )
-    } else Typography()
+    } else {
+        Typography()
+    }
 
     MaterialTheme(typography = typography) {
         val bg = if (s.orangeTheme) {
@@ -54,6 +56,7 @@ private fun AppRoot(vm: QuizViewModel = viewModel()) {
             Brush.verticalGradient(listOf(Color(0xFFEFF6FF), Color(0xFF93C5FD)))
         }
 
+        // QUIZ ekranındayken her saniye tick
         LaunchedEffect(s.screen) {
             while (s.screen == "QUIZ") {
                 delay(1000)
@@ -61,7 +64,9 @@ private fun AppRoot(vm: QuizViewModel = viewModel()) {
             }
         }
 
-        Box(Modifier.fillMaxSize().background(bg)) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(bg)
+        ) {
             when (s.screen) {
                 "MENU" -> MenuScreen(s, vm)
                 "SETTINGS" -> SettingsScreen(s, vm)
